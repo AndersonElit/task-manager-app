@@ -1,0 +1,263 @@
+openapi: 3.1.0
+info:
+  title: Task Manager API
+  description: API RESTful para la gestión de tareas. Expuesta por el Task Service.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Entorno local
+
+tags:
+  - name: Tasks
+    description: Operaciones CRUD sobre tareas
+  - name: History
+    description: Historial de cambios de estado de una tarea
+
+paths:
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: Listar tareas
+      description: Retorna todas las tareas. Se puede filtrar por estado.
+      operationId: getTasks
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filtra por nombre de estado (ej. pendiente, completada)
+          schema:
+            type: string
+            example: pendiente
+      responses:
+        '200':
+          description: Lista de tareas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Tasks]
+      summary: Crear tarea
+      description: >
+        Crea una nueva tarea con estado inicial **pendiente** y publica el evento
+        `task.created` en RabbitMQ para que el Task Processor la procese.
+      operationId: createTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRequest'
+      responses:
+        '201':
+          description: Tarea creada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    get:
+      tags: [Tasks]
+      summary: Obtener tarea por ID
+      operationId: getTaskById
+      responses:
+        '200':
+          description: Tarea encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    put:
+      tags: [Tasks]
+      summary: Actualizar tarea
+      description: Actualiza el título, descripción y/o estado de una tarea.
+      operationId: updateTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskRequest'
+      responses:
+        '200':
+          description: Tarea actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    delete:
+      tags: [Tasks]
+      summary: Eliminar tarea
+      operationId: deleteTask
+      responses:
+        '204':
+          description: Tarea eliminada exitosamente
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /tasks/{id}/history:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+
+    get:
+      tags: [History]
+      summary: Historial de estados de una tarea
+      description: >
+        Retorna la lista cronológica de todos los cambios de estado
+        registrados para la tarea indicada.
+      operationId: getTaskHistory
+      responses:
+        '200':
+          description: Historial de cambios de estado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskStatusHistory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+
+  parameters:
+    TaskId:
+      name: id
+      in: path
+      required: true
+      description: UUID de la tarea
+      schema:
+        type: string
+        format: uuid
+        example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+
+  schemas:
+
+    TaskRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Título de la tarea. No puede estar vacío.
+          example: Implementar autenticación JWT
+        description:
+          type: string
+          nullable: true
+          description: Descripción opcional de la tarea.
+          example: Agregar filtro de seguridad con Spring Security y JWT
+
+    TaskResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        title:
+          type: string
+          example: Implementar autenticación JWT
+        description:
+          type: string
+          nullable: true
+          example: Agregar filtro de seguridad con Spring Security y JWT
+        status:
+          type: string
+          example: pendiente
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-05-21T10:00:00Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-05-21T10:05:00Z'
+
+    TaskStatusHistory:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 7b3e1a20-1111-4321-abcd-000000000001
+        status:
+          type: string
+          example: completada
+        date:
+          type: string
+          format: date-time
+          example: '2026-05-21T10:10:00Z'
+
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: El título de la tarea no puede estar vacío
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-05-21T10:00:00Z'
+
+  responses:
+    BadRequest:
+      description: Datos de entrada inválidos
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Tarea no encontrada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalError:
+      description: Error interno del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
