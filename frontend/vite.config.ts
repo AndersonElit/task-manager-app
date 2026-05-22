@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    port: 8001,
+    strictPort: true,
     proxy: {
       '/restapis': 'http://localhost:4566',
       '/cognito': {
