@@ -25,5 +25,6 @@ provider "aws" {
     rds                     = var.floci_endpoint
     cognitoidentityprovider = var.floci_endpoint
     apigatewayv2            = var.floci_endpoint
+    ecr                     = var.floci_endpoint
   }
 }

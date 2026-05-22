@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLOCI_ENDPOINT="http://localhost:4566"
-AWS_REGION="us-east-1"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../.env.local"
+
+FLOCI_ENDPOINT="$AWS_ENDPOINT_URL"
 SHA=$(git rev-parse --short HEAD)
 
 # Obtener el host del registry desde la repositoryUri de Floci
