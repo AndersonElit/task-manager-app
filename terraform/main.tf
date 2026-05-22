@@ -26,5 +26,6 @@ provider "aws" {
     cognitoidentityprovider = var.floci_endpoint
     apigatewayv2            = var.floci_endpoint
     ecr                     = var.floci_endpoint
+    eks                     = var.floci_endpoint
   }
 }

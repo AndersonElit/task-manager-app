@@ -38,3 +38,7 @@ output "cognito_client_id" {
 output "api_gateway_url" {
   value = "http://localhost:4566/restapis/${aws_apigatewayv2_api.api.id}/${var.api_stage}/_user_request_"
 }
+
+output "eks_cluster_name" {
+  value = aws_eks_cluster.main.name
+}

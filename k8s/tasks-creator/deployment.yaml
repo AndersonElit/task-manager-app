@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tasks-creator
+  namespace: task-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tasks-creator
+  template:
+    metadata:
+      labels:
+        app: tasks-creator
+    spec:
+      containers:
+        - name: tasks-creator
+          image: 000000000000.dkr.ecr.us-east-1.localhost:5000/task-manager/tasks-creator:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: floci-config
+            - secretRef:
+                name: rds-credentials

@@ -10,7 +10,8 @@ docker run -d \
   --network floci-net \
   -p 4566:4566 \
   -p 5000-5099:5000-5099 \
-  -p 5101-8000:5101-8000 \
+  -p 5101-6442:5101-6442 \
+  -p 6444-8000:6444-8000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --add-host=host.docker.internal:host-gateway \
   -e DOCKER_NETWORK=floci-net \

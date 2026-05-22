@@ -43,4 +43,7 @@ print("\n".join([
     "",
     "# API Gateway",
     f"export API_GATEWAY_URL={get(data, 'api_gateway_url')}",
+    "",
+    "# EKS",
+    f"export EKS_CLUSTER_NAME={get(data, 'eks_cluster_name')}",
 ]))

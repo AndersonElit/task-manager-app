@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tasks-processor
+  namespace: task-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tasks-processor
+  template:
+    metadata:
+      labels:
+        app: tasks-processor
+    spec:
+      containers:
+        - name: tasks-processor
+          image: 000000000000.dkr.ecr.us-east-1.localhost:5000/task-manager/tasks-processor:latest
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef:
+                name: floci-config
+            - secretRef:
+                name: rds-credentials
