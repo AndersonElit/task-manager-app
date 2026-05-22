@@ -4,18 +4,43 @@
 
 Crear imágenes Docker optimizadas (multi-stage) para los tres servicios y almacenarlas
 en ECR emulado por Floci. Los repositorios ECR se agregan al mismo `terraform/`
-existente — no hace falta una configuración separada porque Floci soporta ECR de forma
-nativa usando un contenedor `registry:2` interno.
+existente. Floci soporta ECR de forma nativa usando un contenedor `registry:2` interno,
+pero requiere que Docker esté configurado con `insecure-registries` y que Floci arranque
+en una red Docker compartida (`floci-net`) para que el proxy hacia el registry funcione.
 
 ---
 
 ## Cómo funciona ECR en Floci
 
-Floci levanta un contenedor `registry:2` para servir el protocolo Docker Registry v2.
-El control plane (crear repos, obtener credenciales) se expone en `localhost:4566`
-igual que el resto de servicios. La URI que devuelve `aws ecr describe-repositories`
-apunta directamente al registry interno de Floci, por lo que `docker push/pull`
-funciona sin cambios en el cliente Docker.
+Floci levanta un contenedor `registry:2` (`floci-ecr-registry`) para servir el
+protocolo Docker Registry v2. El control plane (crear repos, obtener credenciales)
+se expone en `localhost:4566` igual que el resto de servicios. La URI que devuelve
+`aws ecr describe-repositories` apunta al registry interno de Floci en el puerto 5000.
+
+Para que el proxy de Floci hacia `floci-ecr-registry` funcione, ambos contenedores
+deben estar en la misma red Docker. Esto se logra arrancando Floci con
+`--network floci-net -e DOCKER_NETWORK=floci-net` (ver `plan-aws-local.md`, paso 2).
+
+Además, Docker debe tener el registry configurado como insecure (usa HTTP, no HTTPS).
+
+### Prerequisito: daemon.json
+
+Agregar a `/etc/docker/daemon.json` (crear el archivo si no existe):
+
+```json
+{
+  "insecure-registries": ["000000000000.dkr.ecr.us-east-1.localhost:5000"]
+}
+```
+
+Luego reiniciar el daemon de Docker:
+
+```bash
+sudo systemctl restart docker
+```
+
+> Si ya hay contenido en `daemon.json`, agregar solo la clave `insecure-registries`
+> al objeto existente, sin sobrescribir el resto.
 
 ---
 
@@ -236,12 +261,14 @@ contenedor, no al host).
 
 ## Pasos en orden
 
-1. Agregar `terraform/ecr.tf` y aplicar: `terraform apply -auto-approve`
-2. Crear `backend/tasks-creator/Dockerfile`
-3. Crear `backend/tasks-processor/Dockerfile`
-4. Crear `frontend/Dockerfile` y `frontend/nginx.conf`
-5. Crear `scripts/build-push.sh`
-6. Ejecutar: `./scripts/build-push.sh`
+1. Configurar `/etc/docker/daemon.json` con `insecure-registries` y reiniciar Docker
+2. Levantar Floci con `--network floci-net -e DOCKER_NETWORK=floci-net` (ver `plan-aws-local.md`, paso 2)
+3. Agregar `terraform/ecr.tf` y aplicar: `terraform apply -auto-approve`
+4. Crear `backend/tasks-creator/Dockerfile`
+5. Crear `backend/tasks-processor/Dockerfile`
+6. Crear `frontend/Dockerfile` y `frontend/nginx.conf`
+7. Crear `scripts/build-push.sh`
+8. Ejecutar: `./scripts/build-push.sh`
 
 ---
 

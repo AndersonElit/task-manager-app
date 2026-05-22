@@ -73,24 +73,33 @@ python3 --version
 
 ### 2. Levantar Floci
 
-RDS necesita acceso al socket de Docker para crear contenedores reales de PostgreSQL.
+Floci usa el socket de Docker para crear contenedores internos (PostgreSQL para RDS,
+`registry:2` para ECR). Para que esos contenedores sean alcanzables desde Floci, ambos
+deben compartir la misma red Docker.
 
 ```bash
+# Crear la red compartida (idempotente si ya existe)
+docker network create floci-net 2>/dev/null || true
+
 docker run -d \
   --name floci \
+  --network floci-net \
   -p 4566:4566 \
   -p 5000-8000:5000-8000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --add-host=host.docker.internal:host-gateway \
+  -e DOCKER_NETWORK=floci-net \
   floci/floci:latest
 ```
 
 | Flag | Por qué |
 |---|---|
+| `--network floci-net` | Pone a Floci en la red compartida |
 | `-p 4566:4566` | Puerto único para todos los servicios AWS emulados |
-| `-p 5000-8000` | Rango para los puertos que Floci asigna dinámicamente a RDS |
-| `-v /var/run/docker.sock` | Permite a Floci crear el contenedor PostgreSQL de RDS |
+| `-p 5000-8000` | Rango para los puertos que Floci asigna dinámicamente a RDS y ECR |
+| `-v /var/run/docker.sock` | Permite a Floci crear contenedores de RDS y el registry de ECR |
 | `--add-host=host.docker.internal:host-gateway` | En Linux, `host.docker.internal` no se resuelve automáticamente; esto lo mapea al host |
+| `-e DOCKER_NETWORK=floci-net` | Indica a Floci en qué red crear sus sub-contenedores (ECR registry, RDS) |
 
 ### 3. Aprovisionar la infraestructura con Terraform
 
