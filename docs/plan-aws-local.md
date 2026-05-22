@@ -65,6 +65,7 @@ Verificar que los siguientes comandos estén disponibles:
 
 ```bash
 docker --version
+terraform --version   # >= 1.6
 aws --version
 psql --version
 python3 --version
@@ -91,20 +92,69 @@ docker run -d \
 | `-v /var/run/docker.sock` | Permite a Floci crear el contenedor PostgreSQL de RDS |
 | `--add-host=host.docker.internal:host-gateway` | En Linux, `host.docker.internal` no se resuelve automáticamente; esto lo mapea al host |
 
-### 3. Ejecutar el script de aprovisionamiento
+### 3. Aprovisionar la infraestructura con Terraform
 
-El script `scripts/setup-local.sh` automatiza todo lo siguiente:
-- Crear la cola SQS `task-created-queue`
-- Crear la instancia RDS PostgreSQL y aplicar `docs/model.sql`
-- Crear el Cognito User Pool, App Client y usuario de prueba
-- Crear el API Gateway v2 con JWT Authorizer y rutas `/tasks`
-- Generar el archivo `.env.local` con todas las variables listas
+Toda la infraestructura (SQS, RDS, Cognito, API Gateway) se gestiona como código en `terraform/`.
 
-```bash
-./scripts/setup-local.sh
+#### Estructura de archivos
+
+```
+terraform/
+├── main.tf          # Provider AWS apuntando a Floci (:4566)
+├── variables.tf     # Variables (región, contraseña RDS, etc.)
+├── sqs.tf           # Cola task-created-queue
+├── rds.tf           # Instancia RDS PostgreSQL
+├── cognito.tf       # User Pool, App Client y usuario de prueba
+├── api_gateway.tf   # API Gateway v2, JWT Authorizer y rutas /tasks
+└── outputs.tf       # Exporta IDs/URLs para .env.local
 ```
 
-Al finalizar el script imprime un resumen con las URLs, IDs y el JWT de prueba.
+#### Configuración del provider (`main.tf`)
+
+El provider de AWS se redirige a Floci mediante `endpoints` y se deshabilitan las validaciones que requieren credenciales reales:
+
+```hcl
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_requesting_account_id  = true
+  skip_metadata_api_check     = true
+
+  endpoints {
+    sqs            = "http://localhost:4566"
+    rds            = "http://localhost:4566"
+    cognitoidentityprovider = "http://localhost:4566"
+    apigatewayv2   = "http://localhost:4566"
+  }
+}
+```
+
+#### Inicializar y aplicar
+
+```bash
+cd terraform
+terraform init
+terraform apply -auto-approve
+```
+
+Al finalizar, `terraform output` muestra las URLs, IDs y credenciales. Para generar `.env.local`:
+
+```bash
+terraform output -json | python3 ../scripts/tf-to-env.py > ../.env.local
+```
+
+> `scripts/tf-to-env.py` lee los outputs de Terraform y los escribe como variables de entorno (`KEY=value`).
 
 ### 4. Levantar los microservicios
 
@@ -118,7 +168,7 @@ cd backend/tasks-processor
  mvn install -DskipTests && mvn spring-boot:run -pl infrastructure/entry-points/app
 ```
 
-Ambos servicios leen las variables de entorno desde `.env.local` generado por el script.
+Ambos servicios leen las variables de entorno desde `.env.local` generado por Terraform en el paso anterior.
 
 ### 5. Verificar
 
@@ -143,7 +193,7 @@ curl -s \
 
 ## Generar un nuevo token JWT
 
-El script `setup-local.sh` genera el token durante la ejecución pero no lo persiste en `.env.local`. Para obtener un token en cualquier momento:
+Terraform persiste los IDs de Cognito en `.env.local` pero no el token en sí (expira). Para obtener uno en cualquier momento:
 
 ```bash
 # Cargar variables del entorno local
@@ -180,7 +230,7 @@ Con el token en la variable `$ID_TOKEN` puedes usar directamente los `curl` de l
 > - Usuario: `testuser`
 > - Contraseña: `Test1234!`
 >
-> Estas credenciales las crea el script en el paso de Cognito.
+> Estas credenciales las crea Terraform en el recurso `cognito.tf`.
 
 ---
 
@@ -190,3 +240,5 @@ Con el token en la variable `$ID_TOKEN` puedes usar directamente los `curl` de l
 - [Quick Start - Floci](https://floci.io/floci/getting-started/quick-start/)
 - [Migrate from LocalStack](https://floci.io/floci/getting-started/migrate-from-localstack/)
 - [Services Overview](https://floci.io/floci/services/)
+- [Terraform AWS Provider — custom endpoints](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/custom-service-endpoints)
+- [Terraform AWS Provider — getting started](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
