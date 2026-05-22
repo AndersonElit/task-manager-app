@@ -48,8 +48,23 @@ docker exec "$K3S_CONTAINER" cat /etc/rancher/k3s/k3s.yaml \
 chmod 600 "$K3S_KUBECONFIG"
 export KUBECONFIG="$K3S_KUBECONFIG"
 
+FLOCI_IP=$(docker inspect floci --format '{{(index .NetworkSettings.Networks "floci-net").IPAddress}}')
+if [[ -z "$FLOCI_IP" ]]; then
+  echo "Error: no se pudo obtener la IP del contenedor floci en floci-net."
+  exit 1
+fi
+echo "floci IP en floci-net: $FLOCI_IP"
+
+FLOCI_RDS_IP=$(docker inspect floci-rds-taskdb --format '{{(index .NetworkSettings.Networks "floci-net").IPAddress}}')
+if [[ -z "$FLOCI_RDS_IP" ]]; then
+  echo "Error: no se pudo obtener la IP del contenedor floci-rds-taskdb en floci-net."
+  exit 1
+fi
+echo "floci-rds-taskdb IP en floci-net: $FLOCI_RDS_IP"
+
 kubectl apply -f "$K8S_DIR/namespace.yaml"
 kubectl apply -f "$K8S_DIR/configmap.yaml"
+sed -e "s/FLOCI_IP/$FLOCI_IP/" -e "s/FLOCI_RDS_IP/$FLOCI_RDS_IP/" "$K8S_DIR/floci-service.yaml" | kubectl apply -f -
 
 kubectl create secret generic rds-credentials \
   --namespace task-manager \

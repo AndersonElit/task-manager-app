@@ -18,6 +18,9 @@ spec:
           image: 000000000000.dkr.ecr.us-east-1.localhost:5000/task-manager/tasks-creator:latest
           ports:
             - containerPort: 8080
+          env:
+            - name: SERVER_PORT
+              value: "8080"
           envFrom:
             - configMapRef:
                 name: floci-config

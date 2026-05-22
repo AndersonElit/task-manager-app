@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci
+  namespace: task-manager
+spec:
+  ports:
+    - port: 4566
+      targetPort: 4566
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: floci
+  namespace: task-manager
+subsets:
+  - addresses:
+      - ip: FLOCI_IP
+    ports:
+      - port: 4566
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: floci-rds-taskdb
+  namespace: task-manager
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: floci-rds-taskdb
+  namespace: task-manager
+subsets:
+  - addresses:
+      - ip: FLOCI_RDS_IP
+    ports:
+      - port: 5432
