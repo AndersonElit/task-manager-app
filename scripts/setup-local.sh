@@ -300,23 +300,48 @@ else
   log_warn "JWT Authorizer ya existe ($AUTHORIZER_ID), se omite."
 fi
 
+# Integración para /api/v1/tasks (path fijo)
 INTEGRATION_ID=$($AWSF apigatewayv2 get-integrations \
   --api-id "$API_ID" \
-  --query "Items[0].IntegrationId" \
+  --query "Items[?IntegrationUri=='http://host.docker.internal:${TASK_CREATOR_PORT}/api/v1/tasks'].IntegrationId | [0]" \
   --output text 2>/dev/null || echo "None")
 
 if [ "$INTEGRATION_ID" = "None" ] || [ -z "$INTEGRATION_ID" ]; then
   INTEGRATION_ID=$($AWSF apigatewayv2 create-integration \
     --api-id                  "$API_ID" \
     --integration-type        HTTP_PROXY \
-    --integration-uri         "http://host.docker.internal:$TASK_CREATOR_PORT" \
+    --integration-uri         "http://host.docker.internal:$TASK_CREATOR_PORT/api/v1/tasks" \
     --integration-method      ANY \
     --payload-format-version  1.0 \
     --query 'IntegrationId' --output text)
-  log_success "Integración creada hacia task-creator :$TASK_CREATOR_PORT"
+  log_success "Integración base creada → :$TASK_CREATOR_PORT/api/v1/tasks"
 else
-  log_warn "Integración ya existe ($INTEGRATION_ID), se omite."
+  log_warn "Integración base ya existe ($INTEGRATION_ID), se omite."
 fi
+
+# Integración para /api/v1/tasks/{proxy+} (path con variable)
+PROXY_INTEGRATION_ID=$($AWSF apigatewayv2 get-integrations \
+  --api-id "$API_ID" \
+  --query "Items[?IntegrationUri=='http://host.docker.internal:${TASK_CREATOR_PORT}/api/v1/tasks/{proxy}'].IntegrationId | [0]" \
+  --output text 2>/dev/null || echo "None")
+
+if [ "$PROXY_INTEGRATION_ID" = "None" ] || [ -z "$PROXY_INTEGRATION_ID" ]; then
+  PROXY_INTEGRATION_ID=$($AWSF apigatewayv2 create-integration \
+    --api-id                  "$API_ID" \
+    --integration-type        HTTP_PROXY \
+    --integration-uri         "http://host.docker.internal:$TASK_CREATOR_PORT/api/v1/tasks/{proxy}" \
+    --integration-method      ANY \
+    --payload-format-version  1.0 \
+    --query 'IntegrationId' --output text)
+  log_success "Integración proxy creada → :$TASK_CREATOR_PORT/api/v1/tasks/{proxy}"
+else
+  log_warn "Integración proxy ya existe ($PROXY_INTEGRATION_ID), se omite."
+fi
+
+# Rutas: /api/v1/tasks → integración base, /api/v1/tasks/{proxy+} → integración proxy
+declare -A ROUTE_INTEGRATIONS
+ROUTE_INTEGRATIONS["ANY /api/v1/tasks"]="$INTEGRATION_ID"
+ROUTE_INTEGRATIONS["ANY /api/v1/tasks/{proxy+}"]="$PROXY_INTEGRATION_ID"
 
 for ROUTE_KEY in "ANY /api/v1/tasks" "ANY /api/v1/tasks/{proxy+}"; do
   ROUTE_EXISTS=$($AWSF apigatewayv2 get-routes \
@@ -330,7 +355,7 @@ for ROUTE_KEY in "ANY /api/v1/tasks" "ANY /api/v1/tasks/{proxy+}"; do
       --route-key         "$ROUTE_KEY" \
       --authorization-type JWT \
       --authorizer-id     "$AUTHORIZER_ID" \
-      --target            "integrations/$INTEGRATION_ID" >/dev/null
+      --target            "integrations/${ROUTE_INTEGRATIONS[$ROUTE_KEY]}" >/dev/null
     log_success "Ruta creada: $ROUTE_KEY"
   else
     log_warn "Ruta '$ROUTE_KEY' ya existe, se omite."
@@ -383,6 +408,9 @@ export COGNITO_CLIENT_ID=$CLIENT_ID
 
 # API Gateway
 export API_GATEWAY_URL=$API_GW_URL
+
+# JWT de prueba (testuser / Test1234!)
+export ID_TOKEN=$ID_TOKEN
 EOF
 
 log_success "Archivo generado: $ENV_FILE"
