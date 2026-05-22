@@ -171,10 +171,23 @@ aws eks update-kubeconfig \
 manifiestos de `k8s/` y crea el secret de RDS apuntando a `floci-rds-taskdb:5432`
 (nombre de contenedor resolvible dentro de la red compartida).
 
-### 5. Verificar
+### 5. Acceder al frontend
+
+El frontend corre en k8s como NodePort. Para accederlo desde el host usar port-forward:
 
 ```bash
-# Cargar el JWT generado por el script
+export KUBECONFIG="$HOME/.kube/config-floci-eks"
+kubectl port-forward -n task-manager svc/frontend 8080:80
+```
+
+Abrir en el navegador: **http://localhost:8080**
+
+> El `KUBECONFIG` apunta al kubeconfig real del k3s extraído por `k8s-deploy.sh`.
+> Sin ese export, kubectl usará el kubeconfig AWS que no tiene credenciales válidas.
+
+### 6. Verificar el backend
+
+```bash
 source .env.local
 
 # Crear una tarea a través de API Gateway

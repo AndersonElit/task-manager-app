@@ -47,3 +47,19 @@ print("\n".join([
     "# EKS",
     f"export EKS_CLUSTER_NAME={get(data, 'eks_cluster_name')}",
 ]))
+
+# Generar frontend/.env.local con los valores actuales de Cognito y API Gateway
+import os, pathlib
+
+script_dir = pathlib.Path(__file__).parent
+frontend_env = script_dir.parent / "frontend" / ".env.local"
+
+api_gateway_url = get(data, "api_gateway_url")
+cognito_client_id = get(data, "cognito_client_id")
+
+frontend_env.write_text("\n".join([
+    f"VITE_COGNITO_ENDPOINT=http://localhost:4566",
+    f"VITE_COGNITO_CLIENT_ID={cognito_client_id}",
+    f"VITE_API_URL={api_gateway_url}",
+    "",
+]))

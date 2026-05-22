@@ -3,14 +3,14 @@
 ## Cómo funciona EKS en Floci
 
 Floci emula EKS levantando un contenedor k3s real por cada cluster que se crea.
-El API server de Kubernetes queda expuesto en un puerto del host (típicamente 6443).
+El API server de Kubernetes queda expuesto en el puerto **6500** del host.
 El control plane (crear cluster, obtener kubeconfig) se expone en `localhost:4566`
 igual que el resto de servicios.
 
 Al igual que con ECR, el contenedor k3s que crea Floci necesita estar en la red
 `floci-net` para que las aplicaciones puedan alcanzar los servicios de Floci
 (SQS, RDS, ECR) desde dentro del cluster. Esto requiere el mismo tratamiento:
-excluir el puerto 6443 del rango de `floci` y conectar el contenedor k3s a la red
+excluir el puerto 6500 del rango de `floci` y conectar el contenedor k3s a la red
 después de crearlo.
 
 ---
@@ -34,33 +34,13 @@ resource "aws_eks_cluster" "main" {
     subnet_ids = ["subnet-00000000"]
   }
 }
-
-resource "aws_eks_node_group" "main" {
-  cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "task-manager-nodes"
-  node_role_arn   = "arn:aws:iam::000000000000:role/eks-node-role"
-  subnet_ids      = ["subnet-00000000"]
-
-  scaling_config {
-    desired_size = 2
-    min_size     = 1
-    max_size     = 3
-  }
-
-  instance_types = ["t3.medium"]
-}
-
-output "eks_cluster_name" {
-  value = aws_eks_cluster.main.name
-}
-
-output "eks_cluster_endpoint" {
-  value = aws_eks_cluster.main.endpoint
-}
 ```
 
 > Floci no valida los ARNs de IAM ni las subnets — los valores son placeholders
 > para mantener la estructura idéntica a producción.
+>
+> `aws_eks_node_group` **no está soportado** en Floci: el k3s que levanta internamente
+> ya incluye los nodos de trabajo. En producción (AWS real) se agrega el node group.
 
 Aplicar:
 
@@ -80,6 +60,19 @@ aws eks update-kubeconfig \
   --region us-east-1 \
   --name task-manager \
   --no-cli-pager
+```
+
+El kubeconfig que genera `aws eks update-kubeconfig` usa un token AWS que no es válido
+para el k3s de Floci. El kubeconfig real con las credenciales correctas (certificado
+cliente) está dentro del contenedor k3s en `/etc/rancher/k3s/k3s.yaml`.
+
+`scripts/k8s-deploy.sh` lo extrae automáticamente, parchea el server URL y lo usa:
+
+```bash
+docker exec floci-eks-task-manager cat /etc/rancher/k3s/k3s.yaml \
+  | sed 's|https://127.0.0.1:6443|https://localhost:6500|g' \
+  > ~/.kube/config-floci-eks
+export KUBECONFIG=~/.kube/config-floci-eks
 ```
 
 Verificar:
@@ -103,8 +96,7 @@ K3S_CONTAINER=$(docker ps --format '{{.Names}}' | grep floci-eks)
 docker network connect floci-net "$K3S_CONTAINER"
 ```
 
-> Si falla con "port already allocated" en el 6443, actualizar `scripts/floci-start.sh`
-> agregando 6443 a los puertos excluidos del rango (ver sección al final del plan).
+> El puerto 6500 ya está excluido del rango de `floci` en `scripts/floci-start.sh`.
 
 ---
 
@@ -343,16 +335,22 @@ kubectl get pods -n task-manager
 
 ---
 
-## Conflicto de puerto 6443 en floci-start.sh
+## Puertos reservados por Floci en floci-start.sh
 
-Si al ejecutar `docker network connect floci-net <k3s-container>` aparece el error
-`Bind for :::6443 failed: port is already allocated`, actualizar el rango en
-`scripts/floci-start.sh` para excluir también el 6443:
+Floci asigna puertos fijos a los contenedores que crea. Deben estar excluidos del
+rango de `floci` para evitar conflictos al conectarlos a `floci-net`:
+
+| Contenedor             | Puerto host |
+|------------------------|-------------|
+| `floci-ecr-registry`   | 5100        |
+| `floci-eks-<cluster>`  | 6500        |
+
+El rango actual en `scripts/floci-start.sh` ya los excluye:
 
 ```bash
 -p 5000-5099:5000-5099 \
--p 5101-6442:5101-6442 \
--p 6444-8000:6444-8000 \
+-p 5101-6499:5101-6499 \
+-p 6501-8000:6501-8000 \
 ```
 
 ---
