@@ -131,12 +131,12 @@ curl -s -X POST \
   -H "Authorization: Bearer $ID_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"title":"Mi primera tarea","description":"Prueba local"}' \
-  "$API_GATEWAY_URL/tasks" | python3 -m json.tool
+  "$API_GATEWAY_URL/api/v1/tasks" | python3 -m json.tool
 
 # Listar tareas
 curl -s \
   -H "Authorization: Bearer $ID_TOKEN" \
-  "$API_GATEWAY_URL/tasks" | python3 -m json.tool
+  "$API_GATEWAY_URL/api/v1/tasks" | python3 -m json.tool
 ```
 
 ---
