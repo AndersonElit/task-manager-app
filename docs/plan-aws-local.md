@@ -78,7 +78,7 @@ RDS necesita acceso al socket de Docker para crear contenedores reales de Postgr
 docker run -d \
   --name floci \
   -p 4566:4566 \
-  -p 5000-9000:5000-9000 \
+  -p 5000-8000:5000-8000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --add-host=host.docker.internal:host-gateway \
   floci/floci:latest
@@ -87,7 +87,7 @@ docker run -d \
 | Flag | Por qué |
 |---|---|
 | `-p 4566:4566` | Puerto único para todos los servicios AWS emulados |
-| `-p 5000-9000` | Rango amplio para los puertos que Floci asigna dinámicamente a RDS |
+| `-p 5000-8000` | Rango para los puertos que Floci asigna dinámicamente a RDS |
 | `-v /var/run/docker.sock` | Permite a Floci crear el contenedor PostgreSQL de RDS |
 | `--add-host=host.docker.internal:host-gateway` | En Linux, `host.docker.internal` no se resuelve automáticamente; esto lo mapea al host |
 

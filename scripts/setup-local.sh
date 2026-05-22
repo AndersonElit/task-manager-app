@@ -73,7 +73,7 @@ log_info "Comprobando Floci en $FLOCI_ENDPOINT ..."
 curl -sf "$FLOCI_ENDPOINT/_floci/health" >/dev/null \
   || log_error "Floci no responde. Ejecutá primero:
   docker run -d --name floci \\
-    -p 4566:4566 -p 5000-9000:5000-9000 \\
+    -p 4566:4566 -p 5000-8000:5000-8000 \\
     -v /var/run/docker.sock:/var/run/docker.sock \\
     floci/floci:latest"
 
