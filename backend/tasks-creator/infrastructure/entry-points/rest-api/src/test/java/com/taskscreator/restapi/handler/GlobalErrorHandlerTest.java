@@ -1,40 +1,15 @@
 package com.taskscreator.restapi.handler;
 
-import com.taskscreator.model.exception.TaskNotFoundException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
-import java.util.UUID;
-
-@WebFluxTest(controllers = GlobalErrorHandlerTest.ThrowingController.class)
+@WebFluxTest(controllers = ThrowingController.class)
 @Import(GlobalErrorHandler.class)
 class GlobalErrorHandlerTest {
-
-    @RestController
-    static class ThrowingController {
-
-        @GetMapping("/test/not-found")
-        Mono<String> throwNotFound() {
-            return Mono.error(new TaskNotFoundException(UUID.randomUUID()));
-        }
-
-        @GetMapping("/test/illegal")
-        Mono<String> throwIllegal() {
-            return Mono.error(new IllegalArgumentException("bad arg"));
-        }
-
-        @GetMapping("/test/generic")
-        Mono<String> throwGeneric() {
-            return Mono.error(new RuntimeException("boom"));
-        }
-    }
 
     @Autowired
     private WebTestClient webTestClient;

@@ -32,11 +32,9 @@ describe('useUpdateTask', () => {
 
     const payload: UpdateTaskPayload = { title: 'Actualizada' };
 
-    await act(async () => {
-      await result.current.mutateAsync(payload);
-    });
+    act(() => { result.current.mutate(payload); });
 
-    expect(result.current.isSuccess).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.title).toBe('Actualizada');
     expect(result.current.data?.id).toBe(taskId);
 
@@ -64,9 +62,7 @@ describe('useUpdateTask', () => {
       wrapper: makeWrapper(queryClient),
     });
 
-    await act(async () => {
-      await result.current.mutate({ title: 'Fail' });
-    });
+    act(() => { result.current.mutate({ title: 'Fail' }); });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
   });

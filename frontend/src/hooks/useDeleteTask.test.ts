@@ -27,11 +27,9 @@ describe('useDeleteTask', () => {
       wrapper: makeWrapper(queryClient),
     });
 
-    await act(async () => {
-      await result.current.mutateAsync('task-1');
-    });
+    act(() => { result.current.mutate('task-1'); });
 
-    expect(result.current.isSuccess).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const state = queryClient.getQueryState(['tasks', undefined]);
     expect(state?.isInvalidated).toBe(true);
@@ -53,9 +51,7 @@ describe('useDeleteTask', () => {
       wrapper: makeWrapper(queryClient),
     });
 
-    await act(async () => {
-      await result.current.mutate('task-1');
-    });
+    act(() => { result.current.mutate('task-1'); });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
   });

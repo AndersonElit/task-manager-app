@@ -30,11 +30,9 @@ describe('useCreateTask', () => {
 
     const payload: CreateTaskPayload = { title: 'Nueva tarea', description: 'Desc' };
 
-    await act(async () => {
-      await result.current.mutateAsync(payload);
-    });
+    act(() => { result.current.mutate(payload); });
 
-    expect(result.current.isSuccess).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toMatchObject({ id: mockTask.id, title: mockTask.title });
 
     // After invalidation the cache entry should be stale / undefined (invalidated)
@@ -54,10 +52,9 @@ describe('useCreateTask', () => {
 
     const payload: CreateTaskPayload = { title: 'Test' };
 
-    await act(async () => {
-      await result.current.mutateAsync(payload);
-    });
+    act(() => { result.current.mutate(payload); });
 
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.id).toBe(mockTask.id);
     expect(result.current.data?.status).toBe(mockTask.status);
   });
@@ -78,9 +75,7 @@ describe('useCreateTask', () => {
       wrapper: makeWrapper(queryClient),
     });
 
-    await act(async () => {
-      await result.current.mutate({ title: 'Fail' });
-    });
+    act(() => { result.current.mutate({ title: 'Fail' }); });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
   });
