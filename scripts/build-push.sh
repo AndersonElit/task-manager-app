@@ -15,6 +15,9 @@ REGISTRY_HOST=$(aws --endpoint-url="$FLOCI_ENDPOINT" \
   --query 'repositories[0].repositoryUri' \
   --output text | cut -d'/' -f1)
 
+# Conectar floci-ecr-registry a la red compartida (lo crea terraform, no floci-start.sh)
+docker network connect floci-net floci-ecr-registry 2>/dev/null || true
+
 # Autenticar Docker con Floci ECR
 aws ecr get-login-password \
   --endpoint-url="$FLOCI_ENDPOINT" \

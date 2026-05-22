@@ -17,8 +17,4 @@ docker run -d \
   -e DOCKER_NETWORK=floci-net \
   floci/floci:latest
 
-echo "Esperando que Floci cree floci-ecr-registry..."
-until docker inspect floci-ecr-registry >/dev/null 2>&1; do sleep 1; done
-
-docker network connect floci-net floci-ecr-registry
-echo "Floci listo. floci-ecr-registry conectado a floci-net."
+echo "Floci listo."

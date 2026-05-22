@@ -16,6 +16,8 @@ construido con Quarkus Native. Arranca en ~24 ms, consume ~13 MiB en idle y corr
 | **Cognito**        | Proveedor de identidad para emitir y validar tokens JWT         |
 | **SQS**            | Cola de mensajes (reemplaza RabbitMQ en task-creator/processor) |
 | **RDS PostgreSQL** | Base de datos (reemplaza la conexión directa a PostgreSQL)      |
+| **ECR**            | Registry de imágenes Docker para los tres microservicios        |
+| **EKS**            | Cluster Kubernetes donde corren los microservicios              |
 
 ---
 
@@ -67,6 +69,7 @@ Verificar que los siguientes comandos estén disponibles:
 docker --version
 terraform --version   # >= 1.6
 aws --version
+kubectl version --client   # >= 1.28
 psql --version
 python3 --version
 ```
@@ -94,6 +97,8 @@ terraform/
 ├── rds.tf           # Instancia RDS PostgreSQL
 ├── cognito.tf       # User Pool, App Client y usuario de prueba
 ├── api_gateway.tf   # API Gateway v2, JWT Authorizer y rutas /tasks
+├── ecr.tf           # Repositorios de imágenes Docker (×3)
+├── eks.tf           # Cluster EKS + node group
 └── outputs.tf       # Exporta IDs/URLs para .env.local
 ```
 
@@ -144,19 +149,27 @@ terraform output -json | python3 ../scripts/tf-to-env.py > ../.env.local
 
 > `scripts/tf-to-env.py` lee los outputs de Terraform y los escribe como variables de entorno (`KEY=value`).
 
-### 4. Levantar los microservicios
+### 4. Publicar imágenes en ECR y desplegar en EKS
 
 ```bash
-# Terminal 1 — task-creator (puerto 8080)
-cd backend/tasks-creator
-mvn install -DskipTests && mvn spring-boot:run -pl infrastructure/entry-points/app
+# Construir y subir las imágenes Docker a Floci ECR
+./scripts/build-push.sh
 
-# Terminal 2 — task-processor (puerto 8081)
-cd backend/tasks-processor
- mvn install -DskipTests && mvn spring-boot:run -pl infrastructure/entry-points/app
+# Configurar kubectl apuntando al cluster Floci EKS
+source .env.local
+aws eks update-kubeconfig \
+  --endpoint-url http://localhost:4566 \
+  --region us-east-1 \
+  --name "$EKS_CLUSTER_NAME" \
+  --no-cli-pager
+
+# Desplegar todos los servicios en el cluster
+./scripts/k8s-deploy.sh
 ```
 
-Ambos servicios leen las variables de entorno desde `.env.local` generado por Terraform en el paso anterior.
+`k8s-deploy.sh` conecta el contenedor k3s de Floci a `floci-net`, aplica los
+manifiestos de `k8s/` y crea el secret de RDS apuntando a `floci-rds-taskdb:5432`
+(nombre de contenedor resolvible dentro de la red compartida).
 
 ### 5. Verificar
 
