@@ -57,7 +57,20 @@ Frontend SPA
 
 ---
 
-## 1. Levantar Floci en un contenedor Docker
+## Pasos para levantar el entorno local
+
+### 1. Prerequisitos
+
+Verificar que los siguientes comandos estén disponibles:
+
+```bash
+docker --version
+aws --version
+psql --version
+python3 --version
+```
+
+### 2. Levantar Floci
 
 RDS necesita acceso al socket de Docker para crear contenedores reales de PostgreSQL.
 
@@ -76,247 +89,53 @@ docker run -d \
 | `-p 5400-5420` | Rango de puertos que Floci expone para instancias RDS |
 | `-v /var/run/docker.sock` | Permite a Floci crear el contenedor PostgreSQL de RDS |
 
-Verificar que está corriendo:
+### 3. Ejecutar el script de aprovisionamiento
+
+El script `scripts/setup-local.sh` automatiza todo lo siguiente:
+- Crear la cola SQS `task-created-queue`
+- Crear la instancia RDS PostgreSQL y aplicar `docs/model.sql`
+- Crear el Cognito User Pool, App Client y usuario de prueba
+- Crear el API Gateway v2 con JWT Authorizer y rutas `/tasks`
+- Generar el archivo `.env.local` con todas las variables listas
 
 ```bash
-curl http://localhost:4566/_floci/health
+./scripts/setup-local.sh
 ```
 
----
+Al finalizar el script imprime un resumen con las URLs, IDs y el JWT de prueba.
 
-## 2. Configurar AWS CLI para apuntar a Floci
+### 4. Levantar los microservicios
 
 ```bash
-aws configure set aws_access_key_id     test
-aws configure set aws_secret_access_key test
-aws configure set default.region        us-east-1
-aws configure set default.output        json
+# Terminal 1 — task-creator (puerto 8080)
+cd backend/tasks-creator
+./mvnw spring-boot:run -pl infrastructure/entry-points/app
 
-# Alias para no repetir --endpoint-url
-alias awsf='aws --endpoint-url=http://localhost:4566'
+# Terminal 2 — task-processor (puerto 8081)
+cd backend/tasks-processor
+./mvnw spring-boot:run -pl infrastructure/entry-points/app
 ```
 
----
+Ambos servicios leen las variables de entorno desde `.env.local` generado por el script.
 
-## 3. Aprovisionar SQS
+### 5. Verificar
 
 ```bash
-# Cola estándar para eventos task.created
-awsf sqs create-queue --queue-name task-created-queue
+# Cargar el JWT generado por el script
+source .env.local
 
-# Verificar
-awsf sqs list-queues
+# Crear una tarea a través de API Gateway
+curl -s -X POST \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Mi primera tarea","description":"Prueba local"}' \
+  "$API_GATEWAY_URL/tasks" | python3 -m json.tool
+
+# Listar tareas
+curl -s \
+  -H "Authorization: Bearer $ID_TOKEN" \
+  "$API_GATEWAY_URL/tasks" | python3 -m json.tool
 ```
-
-URL de la cola resultante:
-`http://localhost:4566/000000000000/task-created-queue`
-
----
-
-## 4. Aprovisionar RDS (PostgreSQL)
-
-```bash
-awsf rds create-db-instance \
-  --db-instance-identifier taskdb \
-  --db-instance-class      db.t3.micro \
-  --engine                 postgres \
-  --master-username        admin \
-  --master-user-password   secret123 \
-  --allocated-storage      20
-
-# Esperar a que el estado sea "available"
-awsf rds describe-db-instances \
-  --db-instance-identifier taskdb \
-  --query 'DBInstances[0].DBInstanceStatus'
-```
-
-Floci crea un contenedor Docker real de PostgreSQL y proxy el puerto en el rango `5400-5420`.
-Obtener el endpoint:
-
-```bash
-awsf rds describe-db-instances \
-  --db-instance-identifier taskdb \
-  --query 'DBInstances[0].Endpoint'
-```
-
-Aplicar el modelo de base de datos:
-
-```bash
-psql -h localhost -p <puerto-rds> -U admin -d postgres \
-  -f docs/model.sql
-```
-
----
-
-## 5. Aprovisionar Cognito (emisor JWT)
-
-```bash
-# Crear User Pool
-awsf cognito-idp create-user-pool \
-  --pool-name task-manager-pool \
-  --query 'UserPool.Id' --output text
-
-# Crear App Client (sin secreto para SPA)
-awsf cognito-idp create-user-pool-client \
-  --user-pool-id <POOL_ID> \
-  --client-name task-manager-client \
-  --no-generate-secret \
-  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
-  --query 'UserPoolClient.ClientId' --output text
-
-# Crear usuario de prueba
-awsf cognito-idp admin-create-user \
-  --user-pool-id  <POOL_ID> \
-  --username      testuser \
-  --temporary-password Test1234!
-
-# Login → obtener tokens JWT
-awsf cognito-idp initiate-auth \
-  --auth-flow USER_PASSWORD_AUTH \
-  --client-id <CLIENT_ID> \
-  --auth-parameters USERNAME=testuser,PASSWORD=Test1234!
-```
-
-Guardá el `IdToken` resultante: es el Bearer token que usarás en el frontend y en las pruebas.
-
----
-
-## 6. Aprovisionar API Gateway v2 con JWT Authorizer
-
-```bash
-# 1. Crear HTTP API
-API_ID=$(awsf apigatewayv2 create-api \
-  --name task-manager-api \
-  --protocol-type HTTP \
-  --query 'ApiId' --output text)
-
-# 2. Crear JWT Authorizer apuntando al User Pool de Cognito
-AUTHORIZER_ID=$(awsf apigatewayv2 create-authorizer \
-  --api-id $API_ID \
-  --authorizer-type JWT \
-  --identity-source '$request.header.Authorization' \
-  --name cognito-jwt-authorizer \
-  --jwt-configuration \
-    Audience=<CLIENT_ID>,Issuer=http://localhost:4566/<POOL_ID> \
-  --query 'AuthorizerId' --output text)
-
-# 3. Integración hacia task-creator (corre en :8080)
-INTEGRATION_ID=$(awsf apigatewayv2 create-integration \
-  --api-id $API_ID \
-  --integration-type HTTP_PROXY \
-  --integration-uri http://host.docker.internal:8080 \
-  --integration-method ANY \
-  --payload-format-version 1.0 \
-  --query 'IntegrationId' --output text)
-
-# 4. Ruta protegida: cualquier método sobre /tasks
-awsf apigatewayv2 create-route \
-  --api-id $API_ID \
-  --route-key 'ANY /tasks' \
-  --authorization-type JWT \
-  --authorizer-id $AUTHORIZER_ID \
-  --target integrations/$INTEGRATION_ID
-
-awsf apigatewayv2 create-route \
-  --api-id $API_ID \
-  --route-key 'ANY /tasks/{proxy+}' \
-  --authorization-type JWT \
-  --authorizer-id $AUTHORIZER_ID \
-  --target integrations/$INTEGRATION_ID
-
-# 5. Deploy
-awsf apigatewayv2 create-stage \
-  --api-id $API_ID \
-  --stage-name local \
-  --auto-deploy
-
-# Endpoint final
-echo "API Gateway URL: http://localhost:4566/restapis/$API_ID/local/_user_request_"
-```
-
-Todas las peticiones al API Gateway sin Bearer token válido recibirán `401 Unauthorized`.
-
----
-
-## 7. Configurar los microservicios para usar Floci
-
-### Variables de entorno comunes (`.env`)
-
-```dotenv
-# Floci / AWS
-AWS_ENDPOINT_URL=http://localhost:4566
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=test
-AWS_SECRET_ACCESS_KEY=test
-
-# SQS
-SQS_QUEUE_URL=http://localhost:4566/000000000000/task-created-queue
-
-# RDS
-R2DBC_URL=r2dbc:postgresql://localhost:<puerto-rds>/postgres
-DB_USERNAME=admin
-DB_PASSWORD=secret123
-```
-
-### task-creator — publicar a SQS
-
-```java
-// En lugar de RabbitTemplate, usar SqsAsyncClient del SDK v2
-SqsAsyncClient.builder()
-    .endpointOverride(URI.create(System.getenv("AWS_ENDPOINT_URL")))
-    .region(Region.US_EAST_1)
-    .credentialsProvider(StaticCredentialsProvider.create(
-        AwsBasicCredentials.create("test", "test")))
-    .build();
-```
-
-### task-processor — consumir de SQS
-
-```java
-// Spring Cloud AWS SQS Listener apuntando a Floci
-@SqsListener("task-created-queue")
-public void handleTaskCreated(TaskCreatedEvent event) {
-    // actualizar tarea a completada
-}
-```
-
-Configurar el endpoint en `application.yml`:
-
-```yaml
-spring:
-  cloud:
-    aws:
-      sqs:
-        endpoint: ${AWS_ENDPOINT_URL}
-      credentials:
-        access-key: test
-        secret-key: test
-      region:
-        static: us-east-1
-```
-
----
-
-## 8. Flujo de desarrollo local completo
-
-```
-1. docker run  →  levanta Floci (:4566)
-2. awsf sqs    →  crea task-created-queue
-3. awsf rds    →  crea instancia PostgreSQL (Docker-backed)
-4. psql        →  aplica model.sql
-5. awsf cognito →  crea User Pool + usuario de prueba
-6. awsf apigatewayv2 → crea API + JWT Authorizer + rutas
-7. ./mvnw -pl infrastructure/entry-points/app spring-boot:run  (task-creator :8080)
-8. ./mvnw -pl infrastructure/entry-points/app spring-boot:run  (task-processor :8081)
-9. npm run dev  →  frontend apunta a API Gateway URL
-```
-
----
-
-## Scripts de automatización (próximo paso)
-
-Todos los comandos de aprovisionamiento (pasos 2-6) se pueden consolidar en un script
-`scripts/setup-local.sh` para ejecutar con un solo comando después de levantar Floci.
 
 ---
 
