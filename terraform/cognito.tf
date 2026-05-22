@@ -15,11 +15,9 @@ resource "aws_cognito_user_pool_client" "client" {
   user_pool_id = aws_cognito_user_pool.pool.id
 
   generate_secret = false
-
-  explicit_auth_flows = [
-    "ALLOW_USER_PASSWORD_AUTH",
-    "ALLOW_REFRESH_TOKEN_AUTH",
-  ]
+  # explicit_auth_flows omitido: Floci no devuelve este campo en la respuesta
+  # post-create, lo que rompe la verificación de consistencia del provider v5.
+  # Floci permite USER_PASSWORD_AUTH sin necesidad de declararlo explícitamente.
 }
 
 resource "aws_cognito_user" "testuser" {
