@@ -1,17 +1,19 @@
 spring:
+  config:
+    import: "optional:env[.env]"
   r2dbc:
-    url: ${R2DBC_URL:r2dbc:postgresql://localhost:7001/taskmanager}
-    username: ${DB_USERNAME:admin}
-    password: ${DB_PASSWORD:secret123}
+    url: ${R2DBC_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
 server:
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT}
 
 aws:
-  endpoint-url: ${AWS_ENDPOINT_URL:http://localhost:4566}
-  region: ${AWS_REGION:us-east-1}
-  access-key: ${AWS_ACCESS_KEY_ID:test}
-  secret-key: ${AWS_SECRET_ACCESS_KEY:test}
+  endpoint-url: ${AWS_ENDPOINT_URL}
+  region: ${AWS_REGION}
+  access-key: ${AWS_ACCESS_KEY_ID}
+  secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 sqs:
-  queue-url: ${SQS_QUEUE_URL:http://localhost:4566/000000000000/task-created-queue}
+  queue-url: ${SQS_QUEUE_URL}
