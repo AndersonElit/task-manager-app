@@ -14,15 +14,27 @@
     </parent>
     <properties>
         <java.version>21</java.version>
+        <aws.sdk.version>2.25.0</aws.sdk.version>
     </properties>
     <modules>
-                <module>domain/model</module>
-                <module>application/use-cases</module>
-                <module>infrastructure/driven-adapters/postgres</module>
-                <module>infrastructure/entry-points/rest-api</module>
-                <module>infrastructure/entry-points/app</module>
-                <module>infrastructure/entry-points/rabbit-consumer</module>
+        <module>domain/model</module>
+        <module>application/use-cases</module>
+        <module>infrastructure/driven-adapters/postgres</module>
+        <module>infrastructure/entry-points/rabbit-consumer</module>
+        <module>infrastructure/entry-points/rest-api</module>
+        <module>infrastructure/entry-points/app</module>
     </modules>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>me.paulschwarz</groupId>

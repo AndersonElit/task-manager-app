@@ -1,13 +1,4 @@
 package com.taskscreator.restapi;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
+// Reemplazado por TaskController
 
-@RestController
-public class HelloController {
-    @GetMapping("/hello")
-    public Mono<String> sayHello() {
-        return Mono.just("¡Hola desde el scaffold Hexagonal Reactivo!");
-    }
-}

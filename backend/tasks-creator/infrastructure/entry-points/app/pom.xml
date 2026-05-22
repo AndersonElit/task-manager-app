@@ -10,12 +10,22 @@
     <groupId>com.taskscreator.app</groupId>
     <artifactId>infrastructure-entry-points-app</artifactId>
     <dependencies>
-<dependency>
-    <groupId>com.taskscreator.restapi</groupId>
-    <artifactId>infrastructure-entry-points-rest-api</artifactId>
-    <version>${project.version}</version>
-</dependency>
-</dependencies>
+        <dependency>
+            <groupId>com.taskscreator.restapi</groupId>
+            <artifactId>infrastructure-entry-points-rest-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.taskscreator.postgres</groupId>
+            <artifactId>infrastructure-driven-adapters-postgres</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.taskscreator.sqsproducer</groupId>
+            <artifactId>infrastructure-driven-adapters-sqs-producer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
     <build>
         <plugins>
             <plugin>

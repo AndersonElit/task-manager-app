@@ -4,17 +4,18 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.FilterType;
 
+/**
+ * Registra los casos de uso como beans de Spring.
+ * Los adaptadores y consumidores (@Component, @Configuration)
+ * los detecta @SpringBootApplication por estar en subpaquetes de com.tasksprocessor.
+ */
 @Configuration
 @ComponentScan(
-        basePackages = {
-                "com.tasksprocessor.usecases",
-                "com.tasksprocessor.restapi",
-                "com.tasksprocessor.app"
-        },
+        basePackages = {"com.tasksprocessor.usecases"},
         includeFilters = {
                 @ComponentScan.Filter(
                         type = FilterType.REGEX,
-                        pattern = ".*UseCase?$"
+                        pattern = ".*UseCase$"
                 )
         },
         useDefaultFilters = false

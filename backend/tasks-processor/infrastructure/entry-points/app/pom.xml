@@ -10,12 +10,22 @@
     <groupId>com.tasksprocessor.app</groupId>
     <artifactId>infrastructure-entry-points-app</artifactId>
     <dependencies>
-<dependency>
-    <groupId>com.tasksprocessor.restapi</groupId>
-    <artifactId>infrastructure-entry-points-rest-api</artifactId>
-    <version>${project.version}</version>
-</dependency>
-</dependencies>
+        <dependency>
+            <groupId>com.tasksprocessor.restapi</groupId>
+            <artifactId>infrastructure-entry-points-rest-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.tasksprocessor.postgres</groupId>
+            <artifactId>infrastructure-driven-adapters-postgres</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.tasksprocessor.sqsconsumer</groupId>
+            <artifactId>infrastructure-entry-points-sqs-consumer</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
     <build>
         <plugins>
             <plugin>

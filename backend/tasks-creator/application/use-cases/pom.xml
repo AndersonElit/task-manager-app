@@ -10,5 +10,10 @@
     <groupId>com.taskscreator.usecases</groupId>
     <artifactId>application-use-cases</artifactId>
     <dependencies>
-</dependencies>
+        <dependency>
+            <groupId>com.taskscreator.model</groupId>
+            <artifactId>domain-model</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>
