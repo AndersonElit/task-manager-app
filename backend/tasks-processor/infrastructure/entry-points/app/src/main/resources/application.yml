@@ -1,8 +1,8 @@
 spring:
   r2dbc:
-    url: ${R2DBC_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: ${R2DBC_URL:r2dbc:postgresql://localhost:7001/taskmanager}
+    username: ${DB_USERNAME:admin}
+    password: ${DB_PASSWORD:secret123}
 
 server:
   port: ${SERVER_PORT:8081}
@@ -14,4 +14,4 @@ aws:
   secret-key: ${AWS_SECRET_ACCESS_KEY:test}
 
 sqs:
-  queue-url: ${SQS_QUEUE_URL}
+  queue-url: ${SQS_QUEUE_URL:http://localhost:4566/000000000000/task-created-queue}

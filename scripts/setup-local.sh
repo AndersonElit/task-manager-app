@@ -73,7 +73,7 @@ log_info "Comprobando Floci en $FLOCI_ENDPOINT ..."
 curl -sf "$FLOCI_ENDPOINT/_floci/health" >/dev/null \
   || log_error "Floci no responde. Ejecutá primero:
   docker run -d --name floci \\
-    -p 4566:4566 -p 5400-5420:5400-5420 \\
+    -p 4566:4566 -p 5000-9000:5000-9000 \\
     -v /var/run/docker.sock:/var/run/docker.sock \\
     floci/floci:latest"
 
@@ -102,12 +102,18 @@ log_info "SQS URL: $SQS_QUEUE_URL"
 # -----------------------------------------------------------------------------
 log_section "RDS: instancia $RDS_INSTANCE_ID"
 
-RDS_STATUS=$($AWSF rds describe-db-instances \
-  --db-instance-identifier "$RDS_INSTANCE_ID" \
-  --query 'DBInstances[0].DBInstanceStatus' \
-  --output text 2>/dev/null || echo "not-found")
+# Floci devuelve DBInstances:[] (no un error) cuando la instancia no existe,
+# por eso DBInstances[0].DBInstanceStatus es "None". Se trata igual que "not-found".
+rds_status() {
+  $AWSF rds describe-db-instances \
+    --db-instance-identifier "$RDS_INSTANCE_ID" \
+    --query 'DBInstances[0].DBInstanceStatus' \
+    --output text 2>/dev/null || echo "not-found"
+}
 
-if [ "$RDS_STATUS" = "not-found" ]; then
+RDS_STATUS=$(rds_status)
+
+if [ "$RDS_STATUS" = "not-found" ] || [ "$RDS_STATUS" = "None" ] || [ -z "$RDS_STATUS" ]; then
   log_info "Creando instancia RDS PostgreSQL..."
   $AWSF rds create-db-instance \
     --db-instance-identifier "$RDS_INSTANCE_ID" \
@@ -116,28 +122,30 @@ if [ "$RDS_STATUS" = "not-found" ]; then
     --db-name                "$RDS_DB_NAME" \
     --master-username        "$RDS_USERNAME" \
     --master-user-password   "$RDS_PASSWORD" \
-    --allocated-storage      20 >/dev/null
+    --allocated-storage      20 \
+    --output text >/dev/null \
+    || log_error "Falló la creación de la instancia RDS. Verificá que Floci tenga acceso al socket Docker: -v /var/run/docker.sock:/var/run/docker.sock"
+  log_success "Instancia RDS creada, esperando que esté disponible..."
 else
-  log_warn "Instancia '$RDS_INSTANCE_ID' ya existe (estado: $RDS_STATUS), se omite la creación."
+  log_warn "Instancia '$RDS_INSTANCE_ID' ya existe (estado: $RDS_STATUS)."
 fi
 
 log_info "Esperando que RDS esté disponible..."
-for i in $(seq 1 30); do
-  RDS_STATUS=$($AWSF rds describe-db-instances \
-    --db-instance-identifier "$RDS_INSTANCE_ID" \
-    --query 'DBInstances[0].DBInstanceStatus' \
-    --output text 2>/dev/null || echo "unknown")
+for i in $(seq 1 40); do
+  RDS_STATUS=$(rds_status)
 
   if [ "$RDS_STATUS" = "available" ]; then
     log_success "RDS disponible."
     break
   fi
 
-  echo -n "  intento $i/30 (estado: $RDS_STATUS)..."
+  echo -n "  intento $i/40 (estado: $RDS_STATUS)..."
   sleep 5
   echo ""
 
-  [ "$i" -eq 30 ] && log_error "Timeout esperando RDS. Revisá los logs de Floci."
+  [ "$i" -eq 40 ] && log_error "Timeout esperando RDS.
+  Revisá los logs de Floci con: docker logs floci
+  Asegurate de que el contenedor fue iniciado con: -v /var/run/docker.sock:/var/run/docker.sock"
 done
 
 RDS_HOST=$($AWSF rds describe-db-instances \
@@ -153,6 +161,23 @@ log_info "RDS endpoint: $RDS_HOST:$RDS_PORT"
 # Aplicar modelo de base de datos
 log_info "Aplicando model.sql..."
 [ -f "$MODEL_SQL" ] || log_error "No se encontró $MODEL_SQL"
+
+log_info "Esperando que PostgreSQL acepte conexiones en $RDS_HOST:$RDS_PORT..."
+for i in $(seq 1 30); do
+  if PGPASSWORD="$RDS_PASSWORD" psql \
+       -h "$RDS_HOST" \
+       -p "$RDS_PORT" \
+       -U "$RDS_USERNAME" \
+       -d "$RDS_DB_NAME" \
+       -c "SELECT 1" >/dev/null 2>&1; then
+    log_success "PostgreSQL listo."
+    break
+  fi
+  echo -n "  intento $i/30..."
+  sleep 3
+  echo ""
+  [ "$i" -eq 30 ] && log_error "Timeout esperando PostgreSQL en $RDS_HOST:$RDS_PORT."
+done
 
 PGPASSWORD="$RDS_PASSWORD" psql \
   -h "$RDS_HOST" \
@@ -216,6 +241,14 @@ if [ "$USER_EXISTS" = "0" ]; then
 else
   log_warn "Usuario '$COGNITO_TEST_USER' ya existe, se omite."
 fi
+
+# Establecer contraseña permanente para salir del estado FORCE_CHANGE_PASSWORD
+$AWSF cognito-idp admin-set-user-password \
+  --user-pool-id "$POOL_ID" \
+  --username     "$COGNITO_TEST_USER" \
+  --password     "$COGNITO_TEST_PASSWORD" \
+  --permanent >/dev/null
+log_success "Contraseña marcada como permanente."
 
 log_info "Obteniendo JWT de prueba..."
 JWT_RESPONSE=$($AWSF cognito-idp initiate-auth \
@@ -285,7 +318,7 @@ else
   log_warn "Integración ya existe ($INTEGRATION_ID), se omite."
 fi
 
-for ROUTE_KEY in "ANY /tasks" "ANY /tasks/{proxy+}"; do
+for ROUTE_KEY in "ANY /api/v1/tasks" "ANY /api/v1/tasks/{proxy+}"; do
   ROUTE_EXISTS=$($AWSF apigatewayv2 get-routes \
     --api-id "$API_ID" \
     --query "Items[?RouteKey=='$ROUTE_KEY'] | length(@)" \
@@ -331,25 +364,25 @@ cat > "$ENV_FILE" <<EOF
 # No commitear este archivo.
 
 # AWS / Floci
-AWS_ENDPOINT_URL=$FLOCI_ENDPOINT
-AWS_REGION=$AWS_REGION
-AWS_ACCESS_KEY_ID=test
-AWS_SECRET_ACCESS_KEY=test
+export AWS_ENDPOINT_URL=$FLOCI_ENDPOINT
+export AWS_REGION=$AWS_REGION
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
 
 # SQS
-SQS_QUEUE_URL=$SQS_QUEUE_URL
+export SQS_QUEUE_URL=$SQS_QUEUE_URL
 
 # RDS
-R2DBC_URL=r2dbc:postgresql://$RDS_HOST:$RDS_PORT/$RDS_DB_NAME
-DB_USERNAME=$RDS_USERNAME
-DB_PASSWORD=$RDS_PASSWORD
+export R2DBC_URL=r2dbc:postgresql://$RDS_HOST:$RDS_PORT/$RDS_DB_NAME
+export DB_USERNAME=$RDS_USERNAME
+export DB_PASSWORD=$RDS_PASSWORD
 
 # Cognito
-COGNITO_POOL_ID=$POOL_ID
-COGNITO_CLIENT_ID=$CLIENT_ID
+export COGNITO_POOL_ID=$POOL_ID
+export COGNITO_CLIENT_ID=$CLIENT_ID
 
 # API Gateway
-API_GATEWAY_URL=$API_GW_URL
+export API_GATEWAY_URL=$API_GW_URL
 EOF
 
 log_success "Archivo generado: $ENV_FILE"
@@ -371,5 +404,5 @@ echo -e "
     1. Levantá task-creator  →  cd backend/task-creator  && ./mvnw spring-boot:run
     2. Levantá task-processor →  cd backend/task-processor && ./mvnw spring-boot:run
     3. Probá la API con el JWT:
-       curl -H \"Authorization: Bearer \$ID_TOKEN\" $API_GW_URL/tasks
+       curl -H \"Authorization: Bearer \$ID_TOKEN\" $API_GW_URL/api/v1/tasks
 "
