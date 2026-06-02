@@ -12,6 +12,32 @@ if [[ -z "$K3S_CONTAINER" ]]; then
   exit 1
 fi
 
+# Asegurar que el contenedor k3s exponga los NodePorts necesarios
+K3S_NODEPORT="${K3S_NODEPORT:-30080}"
+if ! docker port "$K3S_CONTAINER" "$K3S_NODEPORT/tcp" >/dev/null 2>&1; then
+  echo "k3s no expone NodePort $K3S_NODEPORT. Recreando contenedor..."
+
+  K3S_IMAGE=$(docker inspect "$K3S_CONTAINER" --format '{{.Config.Image}}')
+  K3S_CMD=$(docker inspect "$K3S_CONTAINER" --format '{{range $i, $v := .Config.Cmd}}{{$v}}{{if $i}} {{end}}{{end}}')
+
+  docker stop "$K3S_CONTAINER" >/dev/null
+  docker rename "$K3S_CONTAINER" "${K3S_CONTAINER}-old" 2>/dev/null || true
+
+  docker run -d \
+    --name "$K3S_CONTAINER" \
+    --network bridge \
+    --privileged \
+    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Mounts}}-v {{.Source}}:{{.Destination}}{{end}}') \
+    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Config.Env}}-e {{.}}{{end}}') \
+    -p 6500:6443 \
+    -p "${K3S_NODEPORT}:${K3S_NODEPORT}" \
+    "$K3S_IMAGE" \
+    $K3S_CMD
+
+  docker rm "${K3S_CONTAINER}-old" >/dev/null 2>&1 || true
+  echo "Contenedor k3s recreado con NodePort $K3S_NODEPORT expuesto."
+fi
+
 # Conectar k3s a floci-net para que los pods alcancen los servicios de Floci
 docker network connect floci-net "$K3S_CONTAINER" 2>/dev/null || true
 echo "k3s en floci-net: $K3S_CONTAINER"
@@ -36,8 +62,26 @@ YAML
   docker restart "$K3S_CONTAINER"
   sleep 10
   docker network connect floci-net "$K3S_CONTAINER" 2>/dev/null || true
+
+  # Extraer kubeconfig nuevo AHORA: tras reiniciar k3s, el viejo tiene certs inválidos
+  # Puede que k3s.yaml aún no exista; el loop de espera lo re-extraerá cuando aparezca
+  docker exec "$K3S_CONTAINER" cat /etc/rancher/k3s/k3s.yaml 2>/dev/null \
+    | sed 's|https://127.0.0.1:6443|https://localhost:6500|g' \
+    > "$HOME/.kube/config-floci-eks" || true
+  chmod 600 "$HOME/.kube/config-floci-eks"
+
   echo "Esperando que el API server esté listo..."
-  until kubectl --kubeconfig="$HOME/.kube/config-floci-eks" get nodes >/dev/null 2>&1; do sleep 2; done
+  for i in $(seq 1 60); do
+    if kubectl --kubeconfig="$HOME/.kube/config-floci-eks" get nodes >/dev/null 2>&1; then
+      break
+    fi
+    if docker exec "$K3S_CONTAINER" cat /etc/rancher/k3s/k3s.yaml >/dev/null 2>&1; then
+      docker exec "$K3S_CONTAINER" cat /etc/rancher/k3s/k3s.yaml \
+        | sed 's|https://127.0.0.1:6443|https://localhost:6500|g' \
+        > "$HOME/.kube/config-floci-eks"
+    fi
+    sleep 2
+  done
 fi
 
 # Extraer kubeconfig real del k3s (el de aws eks update-kubeconfig usa token AWS inválido)

@@ -57,9 +57,11 @@ frontend_env = script_dir.parent / "frontend" / ".env.local"
 api_gateway_url = get(data, "api_gateway_url")
 cognito_client_id = get(data, "cognito_client_id")
 
+api_path = "/" + "/".join(api_gateway_url.split("/")[3:]) if api_gateway_url else ""
+
 frontend_env.write_text("\n".join([
     f"VITE_COGNITO_ENDPOINT=http://localhost:4566",
     f"VITE_COGNITO_CLIENT_ID={cognito_client_id}",
-    f"VITE_API_URL={api_gateway_url}",
+    f"VITE_API_URL={api_path}",
     "",
 ]))
