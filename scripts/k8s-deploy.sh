@@ -18,17 +18,22 @@ if ! docker port "$K3S_CONTAINER" "$K3S_NODEPORT/tcp" >/dev/null 2>&1; then
   echo "k3s no expone NodePort $K3S_NODEPORT. Recreando contenedor..."
 
   K3S_IMAGE=$(docker inspect "$K3S_CONTAINER" --format '{{.Config.Image}}')
-  K3S_CMD=$(docker inspect "$K3S_CONTAINER" --format '{{range $i, $v := .Config.Cmd}}{{$v}}{{if $i}} {{end}}{{end}}')
+  K3S_CMD=$(docker inspect "$K3S_CONTAINER" --format '{{range $i, $v := .Config.Cmd}}{{if $i}} {{end}}{{$v}}{{end}}')
+  # Preservar el hostname: k3s lo usa como nombre de nodo. Si cambia, el contenedor
+  # recreado se registra como un nodo nuevo y los pods de kube-system (CoreDNS, etc.)
+  # quedan huérfanos en el nodo viejo (NotReady) y el DNS del cluster deja de funcionar.
+  K3S_HOSTNAME=$(docker inspect "$K3S_CONTAINER" --format '{{.Config.Hostname}}')
 
   docker stop "$K3S_CONTAINER" >/dev/null
   docker rename "$K3S_CONTAINER" "${K3S_CONTAINER}-old" 2>/dev/null || true
 
   docker run -d \
     --name "$K3S_CONTAINER" \
+    --hostname "$K3S_HOSTNAME" \
     --network bridge \
     --privileged \
-    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Mounts}}-v {{.Source}}:{{.Destination}}{{end}}') \
-    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Config.Env}}-e {{.}}{{end}}') \
+    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Mounts}}-v {{.Source}}:{{.Destination}} {{end}}') \
+    $(docker inspect "${K3S_CONTAINER}-old" --format '{{range .Config.Env}}-e {{.}} {{end}}') \
     -p 6500:6443 \
     -p "${K3S_NODEPORT}:${K3S_NODEPORT}" \
     "$K3S_IMAGE" \

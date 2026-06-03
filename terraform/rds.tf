@@ -22,7 +22,8 @@ resource "null_resource" "init_db" {
   }
 
   provisioner "local-exec" {
-    command = <<-SHELL
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-SHELL
       set -euo pipefail
 
       if ! command -v psql &>/dev/null; then
