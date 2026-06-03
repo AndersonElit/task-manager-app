@@ -101,6 +101,56 @@ Open `http://localhost:30080` and log in with:
 - **Username:** `testuser`
 - **Password:** `Test1234!`
 
+### 7. Inspect pods and logs
+
+The app runs on a k3s cluster inside a Docker container. Point `kubectl` at the generated kubeconfig (needed in every new terminal):
+
+```bash
+export KUBECONFIG="$HOME/.kube/config-floci-eks"
+```
+
+All resources live in the `task-manager` namespace, with three apps: `frontend`, `tasks-creator`, `tasks-processor`.
+
+**View pods:**
+
+```bash
+kubectl get pods -n task-manager            # list pods
+kubectl get pods -n task-manager -o wide    # include IP and node
+kubectl get pods -n task-manager -w         # watch live
+```
+
+**View logs:**
+
+```bash
+# By app label (no need for the exact pod name)
+kubectl logs -n task-manager -l app=frontend
+kubectl logs -n task-manager -l app=tasks-creator
+kubectl logs -n task-manager -l app=tasks-processor
+
+# Follow live, last 100 lines
+kubectl logs -n task-manager -l app=tasks-creator -f --tail=100
+
+# Follow live across all pods of an app, prefixing each line with its pod name
+kubectl logs -n task-manager -l app=tasks-creator -f --prefix
+
+# A specific pod, or its previous container after a crash
+kubectl logs -n task-manager <pod-name>
+kubectl logs -n task-manager <pod-name> --previous
+```
+
+**Open a shell inside a pod:**
+
+```bash
+kubectl exec -it -n task-manager <pod-name> -- bash   # Java backends
+kubectl exec -it -n task-manager <pod-name> -- sh     # if bash is missing (e.g. frontend)
+```
+
+**Diagnose a pod that won't start:**
+
+```bash
+kubectl describe pod -n task-manager <pod-name>
+```
+
 ---
 
 ## Running Services Directly (Without Kubernetes)
